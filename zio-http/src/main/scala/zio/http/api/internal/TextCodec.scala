@@ -5,7 +5,7 @@ import zio.stacktracer.TracingImplicits.disableAutoTrace // scalafix:ok;
 import scala.util.control.NonFatal
 
 /**
- * A [[zio.http.api.TextCodec]] defines a codec for a text fragment. The text
+ * A [[zio.http.api.internal.TextCodec]] defines a codec for a text fragment. The text
  * fragment can be decoded into a value, or the value can be encoded into a text
  * fragment.
  *
@@ -15,14 +15,13 @@ import scala.util.control.NonFatal
  * decoding from a given text fragment. Finally, unlike ordinary parsers, text
  * codecs are fully invertible, and can therefore be used in client generation.
  */
-private[api] sealed trait TextCodec[A] extends PartialFunction[String, A] { self =>
+private[api] sealed trait TextCodec[A] extends PartialFunction[String, A] {
+  self =>
   def apply(value: String): A
 
-  // TODO: Implement this using `isDefinedAt` and `apply` but only after all
-  // subtypes properly & performantly implement `isDefinedAt`.
   final def decode(value: String): Option[A] =
-    try Some(apply(value))
-    catch { case NonFatal(_) => None }
+    if (isDefinedAt(value)) Some(apply(value))
+    else None
 
   def describe: String
 
@@ -103,8 +102,11 @@ private[api] object TextCodec {
 
     def encode(value: Boolean): String = value.toString
 
-    // TODO: Make faster by hand-writing validation:
-    def isDefinedAt(value: String): Boolean = decode(value).isDefined
+    def isDefinedAt(value: String): Boolean = {
+      if (value == "true" || value == "on" || value == "yes" || value == "1") true
+      else if (value == "false" || value == "off" || value == "no" || value == "0") true
+      else false
+    }
 
     override def toString(): String = "TextCodec.boolean"
   }
@@ -116,8 +118,17 @@ private[api] object TextCodec {
 
     def encode(value: UUID): String = value.toString
 
-    // TODO: Make faster by hand-writing validation:
-    def isDefinedAt(value: String): Boolean = decode(value).isDefined
+    def isDefinedAt(value: String): Boolean = {
+      var i       = 0
+      var defined = true
+      while (i < value.length) {
+        if (!value.charAt(i).isUnicodeIdentifierPart) {
+          defined = false
+          i = value.length
+        }
+      }
+      defined
+    }
 
     override def toString(): String = "TextCodec.uuid"
   }
